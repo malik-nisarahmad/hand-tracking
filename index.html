@@ -1,0 +1,976 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JARVIS Hand Tracking AI</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Orbitron', 'Segoe UI', monospace;
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #16213e 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            color: #00d4ff;
+            overflow-x: hidden;
+        }
+
+        .header {
+            text-align: center;
+            color: #00d4ff;
+            margin-bottom: 20px;
+            position: relative;
+        }
+
+        .header h1 {
+            font-size: 3rem;
+            margin-bottom: 10px;
+            text-shadow: 0 0 20px #00d4ff, 0 0 40px #00d4ff;
+            animation: glow 2s ease-in-out infinite alternate;
+        }
+
+        @keyframes glow {
+            from { text-shadow: 0 0 20px #00d4ff, 0 0 40px #00d4ff; }
+            to { text-shadow: 0 0 30px #00d4ff, 0 0 60px #00d4ff, 0 0 80px #00d4ff; }
+        }
+
+        .header p {
+            font-size: 1.2rem;
+            opacity: 0.9;
+            color: #64b5f6;
+        }
+
+        .container {
+            background: linear-gradient(145deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02));
+            border: 2px solid rgba(0, 212, 255, 0.3);
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 212, 255, 0.1), inset 0 0 50px rgba(0, 212, 255, 0.05);
+            overflow: hidden;
+            position: relative;
+            max-width: 1100px;
+            width: 100%;
+            backdrop-filter: blur(10px);
+        }
+
+        .video-container {
+            position: relative;
+            width: 100%;
+            height: 500px;
+            background: #0a0a0a;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-bottom: 2px solid rgba(0, 212, 255, 0.3);
+        }
+
+        #video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1);
+        }
+
+        #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            transform: scaleX(-1);
+        }
+
+        .cursor {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            background: radial-gradient(circle, #00d4ff, #0099cc);
+            border-radius: 50%;
+            border: 3px solid rgba(0, 212, 255, 0.8);
+            box-shadow: 0 0 20px #00d4ff, 0 0 40px #00d4ff;
+            transition: all 0.1s ease;
+            pointer-events: none;
+            z-index: 10;
+            display: none;
+        }
+
+        .cursor.active {
+            display: block;
+            animation: jarvisPulse 1.5s infinite;
+        }
+
+        @keyframes jarvisPulse {
+            0% { 
+                transform: scale(1);
+                box-shadow: 0 0 20px #00d4ff, 0 0 40px #00d4ff;
+            }
+            50% { 
+                transform: scale(1.3);
+                box-shadow: 0 0 30px #00d4ff, 0 0 60px #00d4ff, 0 0 80px #00d4ff;
+            }
+            100% { 
+                transform: scale(1);
+                box-shadow: 0 0 20px #00d4ff, 0 0 40px #00d4ff;
+            }
+        }
+
+        .controls {
+            padding: 30px;
+            background: rgba(10, 10, 10, 0.3);
+        }
+
+        .status {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            gap: 15px;
+        }
+
+        .status-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 15px;
+            background: rgba(0, 212, 255, 0.1);
+            border: 1px solid rgba(0, 212, 255, 0.3);
+            border-radius: 10px;
+            min-width: 120px;
+            box-shadow: inset 0 0 20px rgba(0, 212, 255, 0.1);
+        }
+
+        .status-value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #00d4ff;
+            margin-bottom: 5px;
+            text-shadow: 0 0 10px #00d4ff;
+        }
+
+        .status-label {
+            font-size: 0.9rem;
+            color: #64b5f6;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .jarvis-response {
+            background: linear-gradient(145deg, rgba(0, 212, 255, 0.1), rgba(0, 212, 255, 0.05));
+            border: 2px solid rgba(0, 212, 255, 0.4);
+            border-radius: 15px;
+            padding: 20px;
+            margin: 20px 0;
+            text-align: center;
+            min-height: 80px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .jarvis-response::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: linear-gradient(45deg, transparent, rgba(0, 212, 255, 0.1), transparent);
+            animation: jarvisScan 3s linear infinite;
+            pointer-events: none;
+        }
+
+        @keyframes jarvisScan {
+            0% { transform: translateX(-100%) translateY(-100%) rotate(45deg); }
+            100% { transform: translateX(100%) translateY(100%) rotate(45deg); }
+        }
+
+        .jarvis-text {
+            font-size: 1.4rem;
+            color: #00d4ff;
+            text-shadow: 0 0 10px #00d4ff;
+            z-index: 1;
+            position: relative;
+        }
+
+        .gesture-info {
+            background: rgba(0, 212, 255, 0.05);
+            border: 1px solid rgba(0, 212, 255, 0.3);
+            border-radius: 15px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+
+        .gesture-info h3 {
+            color: #00d4ff;
+            margin-bottom: 15px;
+            font-size: 1.3rem;
+            text-shadow: 0 0 10px #00d4ff;
+        }
+
+        .gesture-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .gesture-item {
+            background: rgba(0, 212, 255, 0.1);
+            padding: 15px;
+            border-radius: 10px;
+            border: 1px solid rgba(0, 212, 255, 0.2);
+            text-align: center;
+        }
+
+        .gesture-emoji {
+            font-size: 2rem;
+            margin-bottom: 10px;
+            display: block;
+        }
+
+        .gesture-name {
+            color: #00d4ff;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .gesture-desc {
+            color: #64b5f6;
+            font-size: 0.9rem;
+        }
+
+        .detected-gesture {
+            background: rgba(0, 212, 255, 0.2) !important;
+            border-color: #00d4ff !important;
+            animation: gestureDetected 0.5s ease;
+        }
+
+        @keyframes gestureDetected {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+
+        .loading {
+            text-align: center;
+            padding: 50px;
+            color: #00d4ff;
+        }
+
+        .loading-spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid rgba(0, 212, 255, 0.3);
+            border-top: 4px solid #00d4ff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error {
+            background: rgba(255, 69, 58, 0.1);
+            color: #ff453a;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            margin: 20px;
+            border: 1px solid rgba(255, 69, 58, 0.3);
+        }
+
+        .voice-indicator {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            width: 60px;
+            height: 60px;
+            background: rgba(0, 212, 255, 0.2);
+            border: 2px solid #00d4ff;
+            border-radius: 50%;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .voice-indicator.speaking {
+            display: flex;
+            animation: voiceAnimation 1s ease-in-out infinite;
+        }
+
+        @keyframes voiceAnimation {
+            0%, 100% { transform: scale(1); box-shadow: 0 0 20px #00d4ff; }
+            50% { transform: scale(1.2); box-shadow: 0 0 40px #00d4ff, 0 0 60px #00d4ff; }
+        }
+
+        @media (max-width: 768px) {
+            .header h1 { font-size: 2rem; }
+            .gesture-grid { grid-template-columns: 1fr; }
+            .status { flex-direction: column; }
+        }
+    </style>
+</head>
+<body>
+    <div class="voice-indicator" id="voiceIndicator">
+        🎤
+    </div>
+
+    <div class="header">
+        <h1>🤖 JARVIS Hand Tracking AI</h1>
+        <p>Advanced gesture recognition with AI voice responses</p>
+    </div>
+
+    <div class="container">
+        <div class="video-container">
+            <video id="video" autoplay muted playsinline></video>
+            <canvas id="canvas"></canvas>
+            <div class="cursor" id="cursor"></div>
+            <div class="loading" id="loading">
+                <div class="loading-spinner"></div>
+                <p>Initializing JARVIS AI systems...</p>
+            </div>
+        </div>
+
+        <div class="controls">
+            <div class="status">
+                <div class="status-item">
+                    <div class="status-value" id="handsCount">0</div>
+                    <div class="status-label">Hands Detected</div>
+                </div>
+                <div class="status-item">
+                    <div class="status-value" id="fps">0</div>
+                    <div class="status-label">FPS</div>
+                </div>
+                <div class="status-item">
+                    <div class="status-value" id="confidence">0%</div>
+                    <div class="status-label">Confidence</div>
+                </div>
+                <div class="status-item">
+                    <div class="status-value" id="currentGesture">None</div>
+                    <div class="status-label">Gesture</div>
+                </div>
+            </div>
+
+            <div class="jarvis-response" id="jarvisResponse">
+                <div class="jarvis-text" id="jarvisText">
+                    🤖 JARVIS is ready to assist you, sir. Show me a gesture to activate.
+                </div>
+            </div>
+
+            <div class="gesture-info">
+                <h3>🎯 Available Gestures</h3>
+                <div class="gesture-grid">
+                    <div class="gesture-item" id="gesture-peace">
+                        <span class="gesture-emoji">✌️</span>
+                        <div class="gesture-name">Peace Sign</div>
+                        <div class="gesture-desc">Activates greeting mode</div>
+                    </div>
+                    <div class="gesture-item" id="gesture-thumbs">
+                        <span class="gesture-emoji">👍</span>
+                        <div class="gesture-name">Thumbs Up</div>
+                        <div class="gesture-desc">System status check</div>
+                    </div>
+                    <div class="gesture-item" id="gesture-fist">
+                        <span class="gesture-emoji">✊</span>
+                        <div class="gesture-name">Fist</div>
+                        <div class="gesture-desc">Power mode activation</div>
+                    </div>
+                    <div class="gesture-item" id="gesture-open">
+                        <span class="gesture-emoji">🖐️</span>
+                        <div class="gesture-name">Open Palm</div>
+                        <div class="gesture-desc">Scan and analyze</div>
+                    </div>
+                    <div class="gesture-item" id="gesture-point">
+                        <span class="gesture-emoji">👉</span>
+                        <div class="gesture-name">Point</div>
+                        <div class="gesture-desc">Target selection</div>
+                    </div>
+                    <div class="gesture-item" id="gesture-rock">
+                        <span class="gesture-emoji">🤘</span>
+                        <div class="gesture-name">Rock Sign</div>
+                        <div class="gesture-desc">Entertainment mode</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class JARVISHandTracker {
+            constructor() {
+                this.video = document.getElementById('video');
+                this.canvas = document.getElementById('canvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.cursor = document.getElementById('cursor');
+                this.loading = document.getElementById('loading');
+                this.voiceIndicator = document.getElementById('voiceIndicator');
+                
+                this.hands = null;
+                this.camera = null;
+                this.isInitialized = false;
+                
+                // Performance tracking
+                this.frameCount = 0;
+                this.lastTime = Date.now();
+                
+                // Smoothing for cursor movement
+                this.smoothFactor = 0.3;
+                this.lastCursorX = 0;
+                this.lastCursorY = 0;
+                
+                // Gesture recognition
+                this.currentGesture = 'none';
+                this.gestureHistory = [];
+                this.lastGestureTime = 0;
+                this.gestureDebounceTime = 2000; // 2 seconds
+                
+                // Voice synthesis
+                this.synth = window.speechSynthesis;
+                this.voice = null;
+                this.setupVoice();
+                
+                this.init();
+            }
+
+            setupVoice() {
+                const voices = this.synth.getVoices();
+                // Try to find a suitable voice (prefer English, male, robotic-sounding)
+                this.voice = voices.find(voice => 
+                    voice.lang.includes('en') && 
+                    (voice.name.includes('Male') || voice.name.includes('Google') || voice.name.includes('Microsoft'))
+                ) || voices[0];
+
+                // If voices aren't loaded yet, wait for them
+                if (voices.length === 0) {
+                    this.synth.addEventListener('voiceschanged', () => {
+                        this.setupVoice();
+                    });
+                }
+            }
+
+            speakJARVIS(text, rate = 0.8, pitch = 0.7) {
+                if (this.synth.speaking) {
+                    this.synth.cancel();
+                }
+
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.voice = this.voice;
+                utterance.rate = rate;
+                utterance.pitch = pitch;
+                utterance.volume = 0.8;
+
+                utterance.onstart = () => {
+                    this.voiceIndicator.classList.add('speaking');
+                };
+
+                utterance.onend = () => {
+                    this.voiceIndicator.classList.remove('speaking');
+                };
+
+                this.synth.speak(utterance);
+                this.updateJARVISResponse(text);
+            }
+
+            updateJARVISResponse(text) {
+                document.getElementById('jarvisText').textContent = text;
+            }
+
+            async init() {
+                try {
+                    await this.setupCamera();
+                    await this.setupHandTracking();
+                    this.loading.style.display = 'none';
+                    this.isInitialized = true;
+                    this.speakJARVIS("JARVIS AI systems online. Hand tracking initialized. Show me your gestures, sir.");
+                } catch (error) {
+                    this.showError('Failed to initialize: ' + error.message);
+                }
+            }
+
+            async setupCamera() {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({
+                        video: {
+                            width: { ideal: 1280 },
+                            height: { ideal: 720 },
+                            facingMode: 'user'
+                        }
+                    });
+                    
+                    this.video.srcObject = stream;
+                    
+                    return new Promise((resolve) => {
+                        this.video.onloadedmetadata = () => {
+                            this.video.play();
+                            this.resizeCanvas();
+                            resolve();
+                        };
+                    });
+                } catch (error) {
+                    throw new Error('Camera access denied. Please allow camera permissions.');
+                }
+            }
+
+            async setupHandTracking() {
+                return new Promise((resolve, reject) => {
+                    try {
+                        this.hands = new Hands({
+                            locateFile: (file) => {
+                                return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+                            }
+                        });
+
+                        this.hands.setOptions({
+                            maxNumHands: 2,
+                            modelComplexity: 1,
+                            minDetectionConfidence: 0.8,
+                            minTrackingConfidence: 0.7
+                        });
+
+                        this.hands.onResults((results) => {
+                            this.onHandResults(results);
+                        });
+
+                        this.camera = new Camera(this.video, {
+                            onFrame: async () => {
+                                await this.hands.send({ image: this.video });
+                            },
+                            width: 1280,
+                            height: 720
+                        });
+                        
+                        this.camera.start();
+                        resolve();
+                    } catch (error) {
+                        reject(error);
+                    }
+                });
+            }
+
+            resizeCanvas() {
+                const rect = this.video.getBoundingClientRect();
+                this.canvas.width = rect.width;
+                this.canvas.height = rect.height;
+            }
+
+            onHandResults(results) {
+                this.updateFPS();
+                this.clearCanvas();
+                
+                const handsCount = results.multiHandLandmarks ? results.multiHandLandmarks.length : 0;
+                document.getElementById('handsCount').textContent = handsCount;
+
+                if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                    // Draw each detected hand
+                    results.multiHandLandmarks.forEach((handLandmarks, index) => {
+                        this.drawHandWithEffects(handLandmarks, index);
+                    });
+                    
+                    // Use the first hand for cursor control and gesture recognition
+                    this.updateCursor(results.multiHandLandmarks[0]);
+                    this.recognizeGesture(results.multiHandLandmarks[0]);
+                    
+                    // Calculate average confidence
+                    const avgConfidence = Math.round(
+                        results.multiHandLandmarks[0].reduce((sum, landmark) => 
+                            sum + (landmark.visibility || 0.8), 0) / 21 * 100
+                    );
+                    document.getElementById('confidence').textContent = avgConfidence + '%';
+                } else {
+                    this.hideCursor();
+                    this.currentGesture = 'none';
+                    document.getElementById('currentGesture').textContent = 'None';
+                    document.getElementById('confidence').textContent = '0%';
+                    this.clearGestureHighlights();
+                }
+            }
+
+            recognizeGesture(handLandmarks) {
+                const gesture = this.detectGesture(handLandmarks);
+                const now = Date.now();
+                
+                if (gesture !== this.currentGesture && now - this.lastGestureTime > this.gestureDebounceTime) {
+                    this.currentGesture = gesture;
+                    this.lastGestureTime = now;
+                    document.getElementById('currentGesture').textContent = gesture;
+                    
+                    this.highlightGesture(gesture);
+                    this.handleGestureAction(gesture);
+                }
+            }
+
+            detectGesture(landmarks) {
+                // Get key landmark positions
+                const thumb_tip = landmarks[4];
+                const thumb_mcp = landmarks[2];
+                const index_tip = landmarks[8];
+                const index_pip = landmarks[6];
+                const middle_tip = landmarks[12];
+                const middle_pip = landmarks[10];
+                const ring_tip = landmarks[16];
+                const ring_pip = landmarks[14];
+                const pinky_tip = landmarks[20];
+                const pinky_pip = landmarks[18];
+                const wrist = landmarks[0];
+
+                // Calculate which fingers are extended
+                const thumbUp = thumb_tip.y < thumb_mcp.y;
+                const indexUp = index_tip.y < index_pip.y;
+                const middleUp = middle_tip.y < middle_pip.y;
+                const ringUp = ring_tip.y < ring_pip.y;
+                const pinkyUp = pinky_tip.y < pinky_pip.y;
+
+                // Count extended fingers
+                const extendedFingers = [indexUp, middleUp, ringUp, pinkyUp].filter(Boolean).length;
+
+                // Gesture recognition logic
+                if (indexUp && middleUp && !ringUp && !pinkyUp) {
+                    return 'Peace Sign';
+                } else if (thumbUp && !indexUp && !middleUp && !ringUp && !pinkyUp) {
+                    return 'Thumbs Up';
+                } else if (!thumbUp && !indexUp && !middleUp && !ringUp && !pinkyUp) {
+                    return 'Fist';
+                } else if (indexUp && middleUp && ringUp && pinkyUp && thumbUp) {
+                    return 'Open Palm';
+                } else if (indexUp && !middleUp && !ringUp && !pinkyUp) {
+                    return 'Point';
+                } else if (indexUp && pinkyUp && !middleUp && !ringUp) {
+                    return 'Rock Sign';
+                }
+
+                return 'Unknown';
+            }
+
+            handleGestureAction(gesture) {
+                const responses = {
+                    'Peace Sign': [
+                        "Greetings, sir. I see you're in a peaceful mood today.",
+                        "Peace and prosperity to you, sir. How may I assist?",
+                        "Hello there! Ready to make the world a better place?"
+                    ],
+                    'Thumbs Up': [
+                        "All systems are operating at optimal capacity, sir.",
+                        "Systems check complete. Everything is running smoothly.",
+                        "Affirmative, sir. All JARVIS protocols are functioning perfectly."
+                    ],
+                    'Fist': [
+                        "Power mode activated. Ready for anything, sir.",
+                        "I sense determination. Shall we tackle some challenges?",
+                        "Full power engaged. What's our mission, sir?"
+                    ],
+                    'Open Palm': [
+                        "Scanning complete. I'm analyzing your biometric data now.",
+                        "Hand scan initialized. All vital signs appear normal, sir.",
+                        "Biometric analysis in progress. You're looking good, sir."
+                    ],
+                    'Point': [
+                        "Target acquired. What shall we investigate, sir?",
+                        "I see you're pointing at something interesting. Shall I analyze it?",
+                        "Direction noted. Ready to focus on your target, sir."
+                    ],
+                    'Rock Sign': [
+                        "Excellent choice, sir. Shall I play some music?",
+                        "Rock and roll! I like your style, sir.",
+                        "Entertainment mode activated. Time to have some fun!"
+                    ]
+                };
+
+                const responseList = responses[gesture];
+                if (responseList) {
+                    const randomResponse = responseList[Math.floor(Math.random() * responseList.length)];
+                    this.speakJARVIS(randomResponse);
+                } else {
+                    this.speakJARVIS("Interesting gesture, sir. I'm still learning to recognize that one.");
+                }
+            }
+
+            highlightGesture(gesture) {
+                this.clearGestureHighlights();
+                
+                const gestureMap = {
+                    'Peace Sign': 'gesture-peace',
+                    'Thumbs Up': 'gesture-thumbs',
+                    'Fist': 'gesture-fist',
+                    'Open Palm': 'gesture-open',
+                    'Point': 'gesture-point',
+                    'Rock Sign': 'gesture-rock'
+                };
+
+                const elementId = gestureMap[gesture];
+                if (elementId) {
+                    const element = document.getElementById(elementId);
+                    if (element) {
+                        element.classList.add('detected-gesture');
+                        setTimeout(() => {
+                            element.classList.remove('detected-gesture');
+                        }, 1000);
+                    }
+                }
+            }
+
+            clearGestureHighlights() {
+                document.querySelectorAll('.gesture-item').forEach(item => {
+                    item.classList.remove('detected-gesture');
+                });
+            }
+
+            drawHandWithEffects(handLandmarks, handIndex) {
+                // Calculate bounding box for the hand
+                let minX = 1, minY = 1, maxX = 0, maxY = 0;
+                
+                handLandmarks.forEach(landmark => {
+                    minX = Math.min(minX, landmark.x);
+                    minY = Math.min(minY, landmark.y);
+                    maxX = Math.max(maxX, landmark.x);
+                    maxY = Math.max(maxY, landmark.y);
+                });
+
+                // Add padding to the bounding box
+                const padding = 0.05;
+                minX = Math.max(0, minX - padding);
+                minY = Math.max(0, minY - padding);
+                maxX = Math.min(1, maxX + padding);
+                maxY = Math.min(1, maxY + padding);
+
+                // Convert to canvas coordinates
+                const rectX = minX * this.canvas.width;
+                const rectY = minY * this.canvas.height;
+                const rectWidth = (maxX - minX) * this.canvas.width;
+                const rectHeight = (maxY - minY) * this.canvas.height;
+
+                // Draw JARVIS-style animated rectangle
+                this.ctx.strokeStyle = '#00d4ff';
+                this.ctx.lineWidth = 3;
+                this.ctx.setLineDash([8, 4]);
+                this.ctx.lineDashOffset = -(Date.now() / 30) % 12;
+                
+                // Add glow effect
+                this.ctx.shadowColor = '#00d4ff';
+                this.ctx.shadowBlur = 15;
+                
+                this.ctx.strokeRect(rectX, rectY, rectWidth, rectHeight);
+                
+                // Draw corner brackets (JARVIS style)
+                const cornerSize = 20;
+                this.ctx.setLineDash([]);
+                this.ctx.lineWidth = 4;
+                
+                // Top-left corner
+                this.ctx.beginPath();
+                this.ctx.moveTo(rectX, rectY + cornerSize);
+                this.ctx.lineTo(rectX, rectY);
+                this.ctx.lineTo(rectX + cornerSize, rectY);
+                this.ctx.stroke();
+                
+                // Top-right corner
+                this.ctx.beginPath();
+                this.ctx.moveTo(rectX + rectWidth - cornerSize, rectY);
+                this.ctx.lineTo(rectX + rectWidth, rectY);
+                this.ctx.lineTo(rectX + rectWidth, rectY + cornerSize);
+                this.ctx.stroke();
+                
+                // Bottom-right corner
+                this.ctx.beginPath();
+                this.ctx.moveTo(rectX + rectWidth, rectY + rectHeight - cornerSize);
+                this.ctx.lineTo(rectX + rectWidth, rectY + rectHeight);
+                this.ctx.lineTo(rectX + rectWidth - cornerSize, rectY + rectHeight);
+                this.ctx.stroke();
+                
+                // Bottom-left corner
+                this.ctx.beginPath();
+                this.ctx.moveTo(rectX + cornerSize, rectY + rectHeight);
+                this.ctx.lineTo(rectX, rectY + rectHeight);
+                this.ctx.lineTo(rectX, rectY + rectHeight - cornerSize);
+                this.ctx.stroke();
+                
+                // Reset shadow
+                this.ctx.shadowBlur = 0;
+
+                // Draw hand landmarks and connections
+                this.drawHandLandmarks(handLandmarks, handIndex);
+
+                // Draw hand label with JARVIS styling
+                this.ctx.fillStyle = '#00d4ff';
+                this.ctx.font = 'bold 16px Orbitron, monospace';
+                this.ctx.shadowColor = '#00d4ff';
+                this.ctx.shadowBlur = 10;
+                this.ctx.fillText(`HAND ${handIndex + 1} - ${this.currentGesture}`, rectX, rectY - 15);
+                this.ctx.shadowBlur = 0;
+            }
+
+            drawHandLandmarks(handLandmarks, handIndex) {
+                // Hand connections (MediaPipe hand model)
+                const connections = [
+                    [0, 1], [1, 2], [2, 3], [3, 4],      // Thumb
+                    [0, 5], [5, 6], [6, 7], [7, 8],      // Index finger
+                    [0, 9], [9, 10], [10, 11], [11, 12], // Middle finger
+                    [0, 13], [13, 14], [14, 15], [15, 16], // Ring finger
+                    [0, 17], [17, 18], [18, 19], [19, 20], // Pinky
+                    [5, 9], [9, 13], [13, 17]             // Palm connections
+                ];
+
+                // Draw connections with JARVIS glow effect
+                this.ctx.strokeStyle = '#00d4ff';
+                this.ctx.lineWidth = 2;
+                this.ctx.shadowColor = '#00d4ff';
+                this.ctx.shadowBlur = 5;
+                
+                connections.forEach(([start, end]) => {
+                    const startPoint = handLandmarks[start];
+                    const endPoint = handLandmarks[end];
+                    
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(
+                        startPoint.x * this.canvas.width,
+                        startPoint.y * this.canvas.height
+                    );
+                    this.ctx.lineTo(
+                        endPoint.x * this.canvas.width,
+                        endPoint.y * this.canvas.height
+                    );
+                    this.ctx.stroke();
+                });
+
+                // Draw landmarks with different colors for finger identification
+                handLandmarks.forEach((landmark, index) => {
+                    const x = landmark.x * this.canvas.width;
+                    const y = landmark.y * this.canvas.height;
+                    
+                    // JARVIS-style colors for different finger parts
+                    let color;
+                    if (index === 0) color = '#ff0080'; // Wrist - Pink
+                    else if (index <= 4) color = '#00ff80'; // Thumb - Green
+                    else if (index <= 8) color = '#0080ff'; // Index - Blue
+                    else if (index <= 12) color = '#80ff00'; // Middle - Lime
+                    else if (index <= 16) color = '#ffff00'; // Ring - Yellow  
+                    else color = '#ff8000'; // Pinky - Orange
+                    
+                    this.ctx.fillStyle = color;
+                    this.ctx.shadowColor = color;
+                    this.ctx.shadowBlur = 8;
+                    
+                    this.ctx.beginPath();
+                    this.ctx.arc(x, y, index === 8 ? 8 : 6, 0, 2 * Math.PI);
+                    this.ctx.fill();
+                    
+                    // Add glowing border
+                    this.ctx.strokeStyle = 'white';
+                    this.ctx.lineWidth = 2;
+                    this.ctx.shadowBlur = 15;
+                    this.ctx.stroke();
+                });
+                
+                this.ctx.shadowBlur = 0;
+            }
+
+            updateCursor(handLandmarks) {
+                // Use the center of the hand (wrist) for cursor position
+                const wrist = handLandmarks[0];
+                const middle_mcp = handLandmarks[9];
+                
+                // Calculate hand center
+                const centerX = (wrist.x + middle_mcp.x) / 2;
+                const centerY = (wrist.y + middle_mcp.y) / 2;
+                
+                if (centerX && centerY) {
+                    const videoRect = this.video.getBoundingClientRect();
+                    
+                    // Convert normalized coordinates to pixel coordinates
+                    const targetX = (1 - centerX) * videoRect.width; // Flip X for mirror effect
+                    const targetY = centerY * videoRect.height;
+                    
+                    // Apply smoothing
+                    const smoothX = this.lastCursorX + (targetX - this.lastCursorX) * this.smoothFactor;
+                    const smoothY = this.lastCursorY + (targetY - this.lastCursorY) * this.smoothFactor;
+                    
+                    this.lastCursorX = smoothX;
+                    this.lastCursorY = smoothY;
+                    
+                    // Position cursor
+                    this.cursor.style.left = (smoothX - 10) + 'px';
+                    this.cursor.style.top = (smoothY - 10) + 'px';
+                    this.cursor.classList.add('active');
+                }
+            }
+
+            hideCursor() {
+                this.cursor.classList.remove('active');
+            }
+
+            clearCanvas() {
+                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+            }
+
+            updateFPS() {
+                this.frameCount++;
+                const now = Date.now();
+                
+                if (now - this.lastTime >= 1000) {
+                    const fps = Math.round((this.frameCount * 1000) / (now - this.lastTime));
+                    document.getElementById('fps').textContent = fps;
+                    this.frameCount = 0;
+                    this.lastTime = now;
+                }
+            }
+
+            showError(message) {
+                this.loading.innerHTML = `
+                    <div class="error">
+                        <h3>⚠️ JARVIS System Error</h3>
+                        <p>${message}</p>
+                        <p>Please ensure you have a webcam and grant camera permissions.</p>
+                        <button onclick="location.reload()" style="margin-top: 10px; padding: 10px 20px; background: #00d4ff; color: #0a0a0a; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">
+                            Restart JARVIS
+                        </button>
+                    </div>
+                `;
+            }
+        }
+
+        // Initialize JARVIS when page loads
+        window.addEventListener('load', () => {
+            new JARVISHandTracker();
+        });
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            const video = document.getElementById('video');
+            const canvas = document.getElementById('canvas');
+            
+            if (video && canvas) {
+                const rect = video.getBoundingClientRect();
+                canvas.width = rect.width;
+                canvas.height = rect.height;
+            }
+        });
+
+        // Add keyboard shortcuts for JARVIS
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'j' || event.key === 'J') {
+                const jarvis = new JARVISHandTracker();
+                if (jarvis.synth) {
+                    jarvis.speakJARVIS("JARVIS at your service, sir. How can I help you today?");
+                }
+            }
+        });
+    </script>
+</body>
+</html>
